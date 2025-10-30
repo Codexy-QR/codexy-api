@@ -1,39 +1,18 @@
 version: '3.8'
 
 services:
-  codexy-mssql-develop:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: codexy-mssql-develop
-    restart: always
-    environment:
-      SA_PASSWORD: Dev_P@ssw0rd_2025
-      ACCEPT_EULA: "Y"
-      MSSQL_PID: Developer
-    ports:
-      - "1433:1433"
-    volumes:
-      - mssql_data_develop:/var/opt/mssql
-    networks:
-      - network_develop
-
   codexy-api-develop:
     container_name: codexy-api-develop
     build:
       context: ../..
-      dockerfile: Dockerfile  
-    restart: always
+      dockerfile: Dockerfile
     env_file:
       - .env.dev
-    depends_on:
-      - codexy-mssql-develop
     ports:
       - "5100:8080"
     networks:
-      - network_develop
-
-volumes:
-  mssql_data_develop:
+      - codexy-network
 
 networks:
-  network_develop:
-    driver: bridge
+  codexy-network:
+    external: true  # ← Ahora sí existirá como "codexy-network"
