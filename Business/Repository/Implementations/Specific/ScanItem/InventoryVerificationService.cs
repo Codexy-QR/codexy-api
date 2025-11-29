@@ -1,7 +1,10 @@
-﻿using Business.Repository.Interfaces.Specific.ScanItem;
+﻿using Business.Abstractions;
+using Business.Helper;
+using Business.Repository.Interfaces.Specific.ScanItem;
 using Business.Services.CacheItem;
 using Business.Services.InventaryItem;
 using Entity.DTOs.ScanItem;
+using Entity.DTOs.System.Verification;
 using Entity.Models.System;
 using Utilities.Enums.Models;
 
@@ -15,15 +18,18 @@ namespace Business.Repository.Implementations.Specific.ScanItem
         private readonly IInventoryRepository _repository;
         private readonly IInventoryValidator _validator;
         private readonly IInventoryCacheService _cache;
+        private readonly IRealtimeUpdateService _realtimeUpdateService; 
 
         public InventoryVerificationService(
             IInventoryRepository repository,
             IInventoryValidator validator,
-            IInventoryCacheService cache)
+            IInventoryCacheService cache,
+            IRealtimeUpdateService realtimeUpdateService) 
         {
             _repository = repository;
             _validator = validator;
             _cache = cache;
+            _realtimeUpdateService = realtimeUpdateService; 
         }
 
         /// <summary>
@@ -67,9 +73,9 @@ namespace Business.Repository.Implementations.Specific.ScanItem
 
             // 2. Traer scans desde cache (escaneos pendientes en memoria o redis)
             var scans = _cache.GetScans(inventaryId);
-            
+
             // 3. Comparar usando el validador adaptado a los nuevos DTOs
-            var comparison = _validator.CompareCacheWithInventary(inventary!, scans);
+            var comparison = await _validator.CompareCacheWithInventary(inventary!, scans);
 
             return comparison;
         }
@@ -84,19 +90,19 @@ namespace Business.Repository.Implementations.Specific.ScanItem
             _validator.EnsurePendingVerification(inventary);
             _validator.EnsureNotAlreadyVerified(inventary!);
 
-            // 1. Validar rol
+            // Validar rol
             if (!string.Equals(role, "VERIFICADOR", StringComparison.OrdinalIgnoreCase))
                 throw new UnauthorizedAccessException("El usuario no tiene rol de Verificador.");
 
-            // 2. Buscar checker
+            // Buscar checker
             var checker = await _repository.GetCheckerByUserIdAsync(userId);
             if (checker == null)
                 throw new InvalidOperationException("Este usuario no está registrado como Checker.");
 
-            // 3. Validar branch
+            // Validar branch
             _validator.EnsureSameBranch(checker, inventary!);
 
-            // 4. Crear verificación
+            // Crear verificación
             var verification = new Verification
             {
                 InventaryId = inventary!.Id,
@@ -108,38 +114,49 @@ namespace Business.Repository.Implementations.Specific.ScanItem
 
             await _repository.AddVerificationAsync(verification);
 
-            // 5. Si aprueba → persistir detalles
-            if (request.Result)
-            {
-                var scans = _cache.GetScans(inventary.Id);
+            // Persistir los detalles escaneados (SIEMPRE)
+            // Se guardan los detalles sin importar si la verificación fue aprobada o rechazada.
+            // Esto permite tener un registro de lo que se escaneó en ese momento.
+            var scans = _cache.GetScans(inventary.Id);
 
-                foreach (var scan in scans.Where(s => s.Status == "Correct"))
+            foreach (var scan in scans.Where(s => s.Status == "Correct"))
+            {
+                var detail = new InventaryDetail
                 {
-                    var detail = new InventaryDetail
-                    {
-                        InventaryId = inventary.Id,
-                        ItemId = scan.ItemId,
-                        StateItemId = scan.StateItemId
-                    };
+                    InventaryId = inventary.Id,
+                    ItemId = scan.ItemId,
+                    StateItemId = scan.StateItemId
+                };
 
-                    await _repository.AddInventaryDetailAsync(detail);
-                }
-
-                inventary.Zone.StateZone = StateZone.Available;
-            }
-            else
-            {
-                // Si rechaza → limpiar cache y liberar zona
-                _cache.ClearScans(inventary.Id);
-                inventary.Zone.StateZone = StateZone.Available;
+                await _repository.AddInventaryDetailAsync(detail);
             }
 
+            // Limpiar caché y liberar la zona (SIEMPRE)
+            // Ya sea que se apruebe o rechace, los escaneos de caché ya fueron procesados 
+            // y persistidos, por lo que limpiamos el caché.
+            _cache.ClearScans(inventary.Id);
 
+            // La zona siempre se libera para que pueda volver a ser usada.
+            inventary.Zone.StateZone = StateZone.Available;
 
-            // 6. Guardar todo en DB
+            // Guardar todo en DB (antes era el paso 6)
             await _repository.SaveChangesAsync();
 
-            // 7. Respuesta
+            var payload = ZoneStateMapper.Map(inventary.Zone);
+            await _realtimeUpdateService.SendUpdateToAllAsync("ReceiveZoneStateUpdate", payload);
+
+            var listPayload = new VerificationListUpdateDTO
+            {
+                InventaryId = inventary.Id,
+                Date = inventary.Date,
+                ZoneId = inventary.ZoneId,
+                ZoneName = inventary.Zone.Name,
+                BranchId = inventary.Zone.BranchId,
+                UpdateType = "Removed"
+            };
+            await _realtimeUpdateService.SendUpdateToAllAsync("ReceiveVerificationListUpdate", listPayload);
+
+            // Respuesta (antes era el paso 7)
             return new VerificationResponseDto
             {
                 VerificationId = verification.Id,

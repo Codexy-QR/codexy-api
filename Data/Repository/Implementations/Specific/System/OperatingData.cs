@@ -200,5 +200,11 @@ namespace Data.Repository.Implementations.Specific.System
                 .Include(o => o.User).ThenInclude(u => u.Person)
                 .ToListAsync();
         }
+
+        public async Task<Operating?> GetByUserIdAsync(int userId)
+        {
+            return await _context.Operating
+                .FirstOrDefaultAsync(o => o.UserId == userId && o.Active);
+        }
     }
 }

@@ -1,6 +1,9 @@
-﻿using Business.Repository.Interfaces.Specific.ScanItem;
+﻿using Business.Abstractions;
+using Business.Helper;
+using Business.Repository.Interfaces.Specific.ScanItem;
 using Business.Services.InventaryItem;
 using Entity.DTOs.ScanItem;
+using Entity.DTOs.System.Verification;
 using Utilities.Enums.Models;
 
 namespace Business.Repository.Implementations.Specific.ScanItem
@@ -12,11 +15,13 @@ namespace Business.Repository.Implementations.Specific.ScanItem
     {
         private readonly IInventoryRepository _repository;
         private readonly IInventoryValidator _validator;
+        private readonly IRealtimeUpdateService _realtimeUpdateService;
 
-        public InventoryFinishService(IInventoryRepository repository, IInventoryValidator validator)
+        public InventoryFinishService(IInventoryRepository repository, IInventoryValidator validator, IRealtimeUpdateService realtimeUpdateService)
         {
             _repository = repository;
             _validator = validator;
+            _realtimeUpdateService = realtimeUpdateService;
         }
 
         /// <summary>
@@ -30,8 +35,26 @@ namespace Business.Repository.Implementations.Specific.ScanItem
 
             inventary!.Observations += $" | Cierre: {request.Observations}";
             inventary.Zone.StateZone = StateZone.InVerification;
+            inventary.Status = InventaryStatus.Verified;
+            inventary.InvitationCode = null;
 
             await _repository.SaveChangesAsync();
+
+            var payload = ZoneStateMapper.Map(inventary.Zone);
+            await _realtimeUpdateService.SendUpdateToAllAsync("ReceiveZoneStateUpdate", payload);
+
+
+            var listPayload = new VerificationListUpdateDTO
+            {
+                InventaryId = inventary.Id,
+                Date = inventary.Date,
+                ZoneId = inventary.ZoneId,
+                ZoneName = inventary.Zone.Name,
+                BranchId = inventary.Zone.BranchId,
+                UpdateType = "Added"
+            };
+            await _realtimeUpdateService.SendUpdateToAllAsync("ReceiveVerificationListUpdate", listPayload);
+            // -----------------------------------------------------------
 
             return new FinishInventoryResponseDto
             {

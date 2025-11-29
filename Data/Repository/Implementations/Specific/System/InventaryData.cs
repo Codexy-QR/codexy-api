@@ -5,6 +5,7 @@ using Entity.DTOs.System.Inventary.AreaManager.InventorySummary;
 using Entity.Models.System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Utilities.Enums.Models;
 
 namespace Data.Repository.Implementations.Specific.System
 {
@@ -64,6 +65,14 @@ namespace Data.Repository.Implementations.Specific.System
 
 
         //Specific
+
+        /// <summary>
+        /// Agrega un nuevo inventario sin retornar la entidad
+        /// </summary>
+        public async Task AddAsync(Inventary entity)
+        {
+            await _context.Set<Inventary>().AddAsync(entity);
+        }
 
         /// <summary>
         /// Obtiene historial de inventarios realizados por un grupo operativo
@@ -199,6 +208,58 @@ namespace Data.Repository.Implementations.Specific.System
                 }).ToList(),
                 StatusSummary = statusSummary
             };
+        }
+
+        /// <summary>
+        /// Obtiene un inventario por código de invitación
+        /// </summary>
+        public async Task<Inventary?> GetByInvitationCodeAsync(string code)
+        {
+            return await _context.Inventary
+                .Include(i => i.Zone)
+                .FirstOrDefaultAsync(i => i.InvitationCode == code);
+        }
+
+        /// <summary>
+        /// Verifica si un código de invitación ya existe
+        /// </summary>
+        public async Task<bool> CheckIfInvitationCodeExistsAsync(string code)
+        {
+            return await _context.Inventary.AnyAsync(i => i.InvitationCode == code);
+        }
+
+        /// <summary>
+        /// Cancela un inventario activo eliminándolo de la base de datos
+        /// </summary>
+        public async Task<Zone?> CancelInventoryAsync(int inventoryId)
+        {
+            try
+            {
+                var inventory = await _context.Inventary
+                    .Include(i => i.Zone) 
+                    .FirstOrDefaultAsync(i => i.Id == inventoryId);
+
+                if (inventory == null)
+                {
+                    _logger.LogWarning($"No se encontró el inventario {inventoryId} para cancelar.");
+                    return null; 
+                }
+
+                var affectedZone = inventory.Zone; 
+                affectedZone.StateZone = StateZone.Available;
+
+                _context.Inventary.Remove(inventory);
+
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation($"Inventario {inventoryId} cancelado. Zona {inventory.ZoneId} actualizada a 'Available'.");
+                return affectedZone;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error al cancelar inventario {inventoryId} y actualizar zona");
+                throw;
+            }
         }
     }
 }

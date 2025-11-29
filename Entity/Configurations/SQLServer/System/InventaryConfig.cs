@@ -1,6 +1,7 @@
-﻿using Entity.Models.System;
-using Microsoft.EntityFrameworkCore.Metadata.Builders;
+﻿using DocumentFormat.OpenXml.Vml.Office;
+using Entity.Models.System;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace Entity.Configurations.SQLServer.System
 {
@@ -19,7 +20,13 @@ namespace Entity.Configurations.SQLServer.System
             builder.Property(inv => inv.Observations)
                 .HasMaxLength(500);
 
+            builder.Property(i => i.InvitationCode).HasMaxLength(10).IsRequired(false);
+            builder.HasIndex(e => e.InvitationCode).IsUnique();
+
+            builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20).IsRequired(false);
+
             builder.Property(inv => inv.Active).HasColumnType("bit").HasDefaultValue(1).IsRequired();
+
 
             builder.HasOne(inv => inv.Zone)
             .WithMany(z => z.Inventories)

@@ -59,7 +59,7 @@ namespace Data.Repository.Implementations
         /// Obtiene zonas disponibles asignadas a un usuario
         /// </summary>
         /// <param name="id">ID del usuario</param>
-        public virtual async Task<IEnumerable<T>> GetAvailableZonesByUserAsync(int id)
+        public virtual async Task<IEnumerable<T>> GetZonesByBranchOperativeAsync(int id)
         {
             try
             {
