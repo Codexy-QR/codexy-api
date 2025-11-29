@@ -56,6 +56,6 @@ namespace Business.Repository.Implementations.Specific.ScanItem
         /// <summary>
         /// Compara los ítems registrados en la caché de escaneo con los ítems finales del inventario para la verificación.
         /// </summary>
-        public VerificationComparisonDto CompareCacheWithInventary(Inventary inventary, IEnumerable<ScannedItem> scans);
+        public Task<VerificationComparisonDto> CompareCacheWithInventary(Inventary inventary, IEnumerable<ScannedItem> scans);
     }
 }

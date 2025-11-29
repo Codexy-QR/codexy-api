@@ -15,7 +15,7 @@ namespace Web.Controllers.Parameters
     /// Controller para gestión de notificaciones
     /// </summary>
     [Route("api/[controller]")]
-    [Authorize(Roles = "SM_ACTION, ADMINISTRADOR, SUBADMINISTRADOR, ENCARGADO_ZONA")]
+    [Authorize(Roles = "SM_ACTION, ADMINISTRADOR, SUBADMINISTRADOR, ENCARGADO_ZONA, VERIFICADOR")]
     public class NotificationController : BaseController<INotificationBusiness>
     {
         public NotificationController(INotificationBusiness userBusiness, ILogger<NotificationController> logger)
@@ -113,6 +113,39 @@ namespace Web.Controllers.Parameters
                 var created = await _service.CreateAsync(dto);
                 return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
             }, "CreateNotification");
+        }
+
+        /// <summary>
+        /// Crea una nueva notificación de solicitud de inventario.
+        /// </summary>
+        /// <param name="request">Datos de la notificación a crear.</param>
+        /// <returns>La notificación genérica creada (código 201).</returns>
+        [HttpPost("InventoryRequest")]
+        [ProducesResponseType(typeof(NotificationDTO), 201)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(500)]
+        public async Task<IActionResult> CreateInventoryRequestNotification([FromBody] CreateInventoryRequestRQS request)
+        {
+            try
+            {
+                var resultDto = await _service.CreateInventoryRequestNotificationAsync(request);
+
+                return CreatedAtAction(
+                    nameof(GetInventoryRequestNotifications),
+                    new { userId = request.UserId },
+                    resultDto
+                );
+            }
+            catch (ValidationException vex)
+            {
+                _logger.LogWarning(vex, "Error de validación al crear notificación de inventario.");
+                return BadRequest(new { Error = vex.Message }); 
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error inesperado al crear notificación de inventario.");
+                return StatusCode(500, new { Error = "Ocurrió un error interno." });
+            }
         }
 
         /// <summary>

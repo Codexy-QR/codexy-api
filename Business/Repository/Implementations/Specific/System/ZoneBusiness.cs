@@ -7,6 +7,7 @@ using Data.Repository.Interfaces.Strategy.Delete;
 using Entity.DTOs.System.Item;
 using Entity.DTOs.System.Zone;
 using Entity.Models.System;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Utilities.Exceptions;
 using Utilities.Helpers;
@@ -23,6 +24,7 @@ namespace Business.Repository.Implementations.Specific.System
 
         private readonly IGeneral<Zone> _general;
         private readonly IZone _zoneData;
+        private readonly IDataFactoryGlobal _factory;
         public ZoneBusiness(
             IDataFactoryGlobal factory,
             IGeneral<Zone> general,
@@ -34,6 +36,7 @@ namespace Business.Repository.Implementations.Specific.System
         {
             _general = general;
             _zoneData = zoneData;
+            _factory = factory;
         }
 
         // General 
@@ -65,20 +68,45 @@ namespace Business.Repository.Implementations.Specific.System
         /// </summary>
         public async Task<IEnumerable<ZoneOperatingDTO>> GetAvailableZonesByUserAsync(int userId)
         {
-            // 1️ Llamo al método de Data
-            var zones = await _general.GetAvailableZonesByUserAsync(userId);
+            var operating = await _factory.CreateOperatingData()
+                .GetQueryable()
+                .Include(o => o.CreatedByUser)   // ← El encargado real
+                .Where(o => o.UserId == userId)
+                .FirstOrDefaultAsync();
 
-            // 2️ Transformo a DTO
-            var zoneDtos = zones.Select(z => new ZoneOperatingDTO
+            if (operating is null)
+                throw new Exception("El usuario no está asignado a ningún Operating.");
+
+            var encargado = operating.CreatedByUser;
+
+            // 2️⃣ Obtener zonas del encargado
+            var zonasDelEncargado = await _factory.CreateZoneData()
+                .GetQueryable()
+                .Include(z => z.Branch)
+                    .ThenInclude(b => b.Company)
+                .Where(z => z.UserId == encargado.Id)
+                .ToListAsync();
+
+            if (!zonasDelEncargado.Any())
+                throw new Exception("El encargado no tiene zonas asignadas.");
+
+            // 3️⃣ Tomamos la Branch desde la primera zona del encargado
+            var branch = zonasDelEncargado.First().Branch;
+
+            // 4️⃣ Recuperamos todas las zonas de esa Branch
+            var zonas = await _zoneData.GetZonesByBranchAsync(branch.Id);
+
+            // 5️⃣ Mapeo a DTO
+            return zonas.Select(z => new ZoneOperatingDTO
             {
                 Id = z.Id,
                 Name = z.Name,
-                Description = z.Description!,
-                BranchName = z.Branch.Name,
-                CompanyName = z.Branch.Company.Name
+                Description = z.Description ?? "",
+                BranchId = branch.Id,
+                BranchName = branch.Name,
+                CompanyName = branch.Company.Name,
+                StateZone = z.StateZone.ToString()
             }).ToList();
-
-            return zoneDtos;
         }
 
         /// <summary>

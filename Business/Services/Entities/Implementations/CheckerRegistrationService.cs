@@ -3,6 +3,7 @@ using Business.Services.Entities.Interfaces;
 using Business.Services.SendEmail.Interfaces;
 using Data.Repository.Interfaces.Specific.SecurityModule;
 using Data.Repository.Interfaces.Specific.System;
+using Entity.DTOs.System.Branch.NestedCreation;
 using Entity.DTOs.System.Checker.NestedCreation;
 using Entity.Models.SecurityModule;
 using Entity.Models.System;
@@ -127,7 +128,7 @@ namespace Business.Services.Entities.Implementations
 
                 // 7. Enviar email con credenciales
 
-                var company = await _companyData.GetByIdAsync(request.BranchId);
+                var company = await _companyData.GetByBranchIdAsync(request.BranchId);
 
                 var emailSent = await SendWelcomeEmailAsync(
                     request.PersonEmail,

@@ -37,5 +37,10 @@ namespace Data.Repository.Interfaces.Specific.System
         /// Obtiene asignaciones de operarios en un grupo
         /// </summary>
         Task<IEnumerable<Operating>> GetOperativeAssignmentsByGroupAsync(int groupId);
+
+        /// <summary>
+        /// Obtiene un operativo por su UserId
+        /// </summary>
+        Task<Operating?> GetByUserIdAsync(int userId);
     }
 }
