@@ -1,15 +1,15 @@
 ﻿using Business.Repository.Interfaces.Specific.ScanItem;
+using Business.Services.Entities.Interfaces.Connection;
 using Entity.DTOs.ScanItem;
+using Entity.DTOs.ScanItem.Missing;
+using Entity.DTOs.System.Connection;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
+using Utilities.Exceptions;
 
 namespace Web.Controllers.System.Others
 {
-    /// <summary>
-    /// Controlador encargado de gestionar el flujo completo del inventario:
-    /// inicio, escaneo, finalización y verificación.
-    /// </summary>
-
     [ApiController]
     [Route("api/[controller]")]
     public class InventoryController : ControllerBase
@@ -18,26 +18,32 @@ namespace Web.Controllers.System.Others
         private readonly IInventoryStartService _startService;
         private readonly IInventoryFinishService _finishService;
         private readonly IInventoryVerificationService _verifyService;
+        private readonly IInventoryJoinService _joinService;
 
-        public InventoryController(IInventoryScanService scanService, IInventoryStartService startService, IInventoryFinishService finishService, IInventoryVerificationService verifyService)
+        public InventoryController(
+            IInventoryScanService scanService, 
+            IInventoryStartService startService, 
+            IInventoryFinishService finishService, 
+            IInventoryVerificationService verifyService,
+            IInventoryJoinService joinService)
         {
             _scanService = scanService;
             _startService = startService;
             _finishService = finishService;
             _verifyService = verifyService;
+            _joinService = joinService;
         }
 
-        /// <summary>
-        /// Inicia un nuevo proceso de inventario en una sucursal.
-        /// </summary>
-        /// <param name="request">Datos necesarios para iniciar el inventario.</param>
         [HttpPost("start")]
         public async Task<IActionResult> Start([FromBody] StartInventoryRequestDto request)
         {
             try
             {
-                // userId debería venir del token JWT
-                var userId = int.Parse(User.FindFirst("id")?.Value ?? "0");
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId) || userId == 0)
+                {
+                    return Unauthorized(new { Message = "No se pudo identificar al usuario desde el token." });
+                }
 
                 var result = await _startService.StartAsync(request, userId);
                 return Ok(result);
@@ -48,16 +54,20 @@ namespace Web.Controllers.System.Others
             }
         }
 
-        /// <summary>
-        /// Registra el escaneo de un producto durante un inventario activo.
-        /// </summary>
-        /// <param name="request">Información del producto escaneado.</param>
         [HttpPost("scan")]
         public async Task<IActionResult> Scan([FromBody] ScanRequestDto request)
         {
             try
             {
-                var result = await _scanService.ScanAsync(request);
+                // Obtener el userId del token
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId) || userId == 0)
+                {
+                    return Unauthorized(new { Message = "No se pudo identificar al usuario desde el token." });
+                }
+
+                // Pasar el userId al servicio
+                var result = await _scanService.ScanAsync(request, userId);
                 return Ok(result);
             }
             catch (Exception ex)
@@ -66,14 +76,6 @@ namespace Web.Controllers.System.Others
             }
         }
 
-        /// <summary>
-        /// Finaliza un inventario, consolidando la información escaneada.
-        /// </summary>
-        /// <param name="request">Datos de cierre del inventario.</param>
-        /// <summary>
-        /// Finaliza un inventario, consolidando la información escaneada.
-        /// </summary>
-        /// <param name="request">Datos de cierre del inventario.</param>
         [HttpPost("finish")]
         public async Task<IActionResult> Finish([FromBody] FinishInventoryRequestDto request)
         {
@@ -81,9 +83,6 @@ namespace Web.Controllers.System.Others
             return Ok(result);
         }
 
-        /// <remarks>
-        /// Devuelve los inventarios pendientes de verificación para la sucursal indicada.
-        /// </remarks>
         [HttpGet("verification/branch/{branchId}")]
         public async Task<ActionResult<List<InventarySummaryDto>>> GetInventoriesForVerification(int branchId)
         {
@@ -95,31 +94,107 @@ namespace Web.Controllers.System.Others
             return Ok(inventories);
         }
 
-        /// <remarks>
-        /// Permite comparar los datos del inventario con los escaneos no confirmados para detectar discrepancias.
-        /// </remarks>
         [HttpGet("{inventaryId}/compare")]
         public async Task<ActionResult<VerificationComparisonDto>> CompareAsync(int inventaryId)
         {
             var result = await _verifyService.CompareAsync(inventaryId);
+            return Ok(result);
+        }
 
-            // Si no hay inconsistencias, devuelve 200 con el DTO limpio
-            // Si hay observaciones, igual devuelve 200 con las diferencias
+        [HttpGet("{inventaryId}/is-scanned/{code}")]
+        public async Task<IActionResult> IsScanned(int inventaryId, string code)
+        {
+            var result = await _scanService.CheckIfScannedAsync(inventaryId, code);
+
+            if (result.ItemId == null)
+                return NotFound(new { message = result.Message });
+
+            return Ok(result);
+        }
+
+
+        [HttpPost("verify")]
+        public async Task<IActionResult> Verify([FromBody] VerificationRequestDto request)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            var roleClaim = User.FindFirst(ClaimTypes.Role);
+
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId) || userId == 0)
+            {
+                return Unauthorized(new { Message = "No se pudo identificar al usuario desde el token." });
+            }
+
+            var role = roleClaim?.Value ?? "";
+
+            var result = await _verifyService.VerifyAsync(request, userId, role);
             return Ok(result);
         }
 
         /// <summary>
-        /// Verifica un inventario y actualiza su estado según el resultado de la comparación.
+        /// Valida si un operativo (invitado) puede unirse a un inventario.
+        /// Requerido ANTES de unirse al grupo de SignalR.
         /// </summary>
-        /// <param name="request">Datos de verificación y observaciones.</param>
-        [HttpPost("verify")]
-        public async Task<IActionResult> Verify([FromBody] VerificationRequestDto request)
+        [Authorize(Roles = "OPERATIVO")] 
+        [HttpPost("join")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(400)] 
+        [ProducesResponseType(401)] 
+        public async Task<IActionResult> Join([FromBody] JoinInventoryRequestDTO request)
         {
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
-            var role = User.FindFirst(ClaimTypes.Role)?.Value ?? string.Empty;
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+                if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int guestUserId) || guestUserId == 0)
+                {
+                    return Unauthorized(new { Message = "No se pudo identificar al usuario desde el token." });
+                }
 
-            var result = await _verifyService.VerifyAsync(request, userId, role);
-            return Ok(result);
+                var inventary = await _joinService.ValidateJoinAsync(request, guestUserId);
+                return Ok(new
+                {
+                    Message = "Validación exitosa. Bienvenido al inventario.",
+                    ZoneId = inventary.ZoneId,
+                    InventaryId = inventary.Id
+                });
+            }
+            catch (ValidationException ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { Message = "Ocurrió un error inesperado.", Details = ex.Message });
+            }
+        }
+
+        [Authorize(Roles = "OPERATIVO")]
+        [HttpGet("{inventaryId}/missing")]
+        public async Task<IActionResult> GetMissingItems(int inventaryId)
+        {
+            try
+            {
+                var result = await _scanService.GetMissingItemsAsync(inventaryId);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
+        }
+
+        [Authorize(Roles = "OPERATIVO")]
+        [HttpPost("manual-scan")]
+        public async Task<IActionResult> RegisterManualScans([FromBody] ManualScanRequestDTO request)
+        {
+            try
+            {
+                await _scanService.RegisterManualScansAsync(request);
+                return Ok(new { Message = "Ítems registrados correctamente." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { Message = ex.Message });
+            }
         }
     }
 }
