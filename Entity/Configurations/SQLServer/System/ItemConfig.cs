@@ -26,6 +26,9 @@ namespace Entity.Configurations.SQLServer.System
 
             builder.HasIndex(i => i.Code).IsUnique();
 
+            builder.Property(i => i.QrPublicId)
+                .HasMaxLength(255);
+
             builder.Property(i => i.Active).HasColumnType("bit").HasDefaultValue(1).IsRequired();
 
             builder.HasOne(i => i.Zone)

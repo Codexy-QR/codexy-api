@@ -66,7 +66,7 @@ namespace Business.Services.PaswordRecovery
 
                 // Generar token de recuperación
                 var token = await GenerateRecoveryTokenAsync(user.Id, user.Person.Email);
-                var baseUrl = _configuration["AppSettings:BaseUrl"] ?? "http://localhost:4200/recovery-password";
+                var baseUrl = _configuration["AppSettings:BaseUrl"] ?? "https://wonderful-bay-06d04b00f.3.azurestaticapps.net/recovery-password";
                 var recoveryLink = $"{baseUrl}?token={token}";
 
                 // Crear contenido del email

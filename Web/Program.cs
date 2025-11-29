@@ -1,8 +1,8 @@
 using Business.AutoMapper;
 using CloudinaryDotNet;
 using Data.SeedData.SeederHelpers;
-using System.Reflection;
 using Web.Extensions;
+using Web.Hubs;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,10 +25,23 @@ builder.Services.AddControllers();
 builder.Services.AddAutoMapper(typeof(GeneralMapper));
 
 // Swagger 
-builder.Services.AddSwaggerDocumentation();
-builder.Services.AddSwaggerWithJwtSupport(); // Extension
+builder.Services.AddSwaggerDocumentation();// Extension
 
 builder.Services.AddMemoryCache();
+
+// SignalR coon Microsoft SignalR
+var azureSignalRConnection = builder.Configuration["Azure:SignalR:ConnectionString"];
+if (!string.IsNullOrEmpty(azureSignalRConnection))
+{
+    builder.Services.AddSignalR()
+                    .AddAzureSignalR(azureSignalRConnection);
+}
+else
+{
+    // Si no hay cadena de Azure (Desarrollo Local sin internet o pruebas), usa el estándar.
+    builder.Services.AddSignalR();
+}
+
 
 // JWT 
 builder.Services.AddJwtAuthentication(builder.Configuration); // Extension
@@ -85,4 +98,5 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+app.MapHub<AppHub>("/appHub");
 app.Run();

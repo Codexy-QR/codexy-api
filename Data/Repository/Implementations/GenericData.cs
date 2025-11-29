@@ -21,6 +21,11 @@ namespace Data.Repository.Implementations
             _logger = logger;
         }
 
+        public IQueryable<T> GetQueryable()
+        {
+            return _context.Set<T>().AsQueryable();
+        }
+
         /// <summary>
         /// Obtiene todos los registros activos
         /// </summary>

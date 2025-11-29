@@ -249,31 +249,15 @@ namespace Data.Repository.Implementations.Specific.System
         /// Obtiene zonas disponibles para un operario según sus grupos activos
         /// </summary>
         /// <param name="userId">ID del usuario operario</param>
-        public override async Task<IEnumerable<Zone>> GetAvailableZonesByUserAsync(int userId)
+        public override async Task<IEnumerable<Zone>> GetZonesByBranchOperativeAsync(int branchId)
         {
             try
             {
-                var now = DateTime.Now;
-
-                var zones = await _context.Operating
-                    .Where(o => o.UserId == userId &&
-                                o.OperationalGroup != null &&
-                                o.OperationalGroup.DateStart <= now &&
-                                (o.OperationalGroup.DateEnd == null || o.OperationalGroup.DateEnd >= now))
-                    .Select(o => o.OperationalGroup!.User.Zone) 
-                    .Where(z => z != null && z.StateZone == StateZone.Available)
-                    .ToListAsync(); 
-
-                foreach (var zone in zones)
-                {
-                    await _context.Entry(zone!)
-                        .Reference(z => z.Branch)
-                        .Query()
-                        .Include(b => b.Company)
-                        .LoadAsync();
-                }
-
-                return zones!;
+                return await _context.Zone
+                    .Include(z => z.Branch)
+                        .ThenInclude(b => b.Company)
+                    .Where(z => z.BranchId == branchId)
+                    .ToListAsync();
             }
             catch (Exception ex)
             {

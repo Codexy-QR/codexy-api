@@ -510,7 +510,7 @@
                             </div>
 
                             <div class='button-container'>
-                                <a href='http://localhost:4200/Login' target='_blank'
+                                <a href='https://wonderful-bay-06d04b00f.3.azurestaticapps.net/Login' target='_blank'
                                     class='button'
                                     style='color: #ffffff !important; text-decoration: none; display: inline-block;'>
                                     Iniciar Sesión

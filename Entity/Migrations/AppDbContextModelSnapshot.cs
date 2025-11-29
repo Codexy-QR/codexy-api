@@ -781,6 +781,10 @@ namespace Entity.Migrations
                     b.Property<DateTime>("Date")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("InvitationCode")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
                     b.Property<string>("Observations")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -788,6 +792,10 @@ namespace Entity.Migrations
 
                     b.Property<int>("OperatingGroupId")
                         .HasColumnType("int");
+
+                    b.Property<string>("Status")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2(3)");
@@ -799,6 +807,10 @@ namespace Entity.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("InvitationCode")
+                        .IsUnique()
+                        .HasFilter("[InvitationCode] IS NOT NULL");
 
                     b.HasIndex("OperatingGroupId");
 
@@ -890,6 +902,10 @@ namespace Entity.Migrations
 
                     b.Property<string>("QrPath")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("QrPublicId")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<int>("StateItemId")
                         .HasColumnType("int");

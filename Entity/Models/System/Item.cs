@@ -7,6 +7,7 @@ namespace Entity.Models.System
     {
         public string Code { get; set; } = string.Empty;
         public string? QrPath { get; set; }
+        public string? QrPublicId { get; set; }
 
         // Claves Foraneas
         public int ZoneId { get; set; }

@@ -1,5 +1,5 @@
-﻿using System.Text.Json;
-using AutoMapper;
+﻿using AutoMapper;
+using Business.Abstractions;
 using Business.Repository.Interfaces.Specific.ParametersModule;
 using Business.Services.SendEmail.Interfaces;
 using Data.Factory;
@@ -11,6 +11,7 @@ using Entity.DTOs.ParametersModels.Notification;
 using Entity.DTOs.ParametersModels.Notification.RQS;
 using Entity.Models.ParametersModule;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 using Utilities.Enums.Models;
 using Utilities.Exceptions;
 using Utilities.Helpers;
@@ -27,11 +28,13 @@ namespace Business.Repository.Implementations.Specific.ParametersModule
 
         private readonly IGeneral<Notification> _general;
         private readonly INotificationData _notificationData;
+        private readonly IRealtimeUpdateService _realtimeUpdateService;
         private readonly IEmailService _emailService;
 
         public NotificationBusiness(
             IGeneral<Notification> general,
             IDataFactoryGlobal factory,
+            IRealtimeUpdateService realtimeUpdateService,
             IEmailService emailService,
             IDeleteStrategyResolver<Notification> deleteStrategyResolver,
             ILogger<Notification> logger,
@@ -40,6 +43,7 @@ namespace Business.Repository.Implementations.Specific.ParametersModule
         {
             _general = general;
             _notificationData = factory.CreateNotificationData();
+            _realtimeUpdateService = realtimeUpdateService;
             _emailService = emailService;
 
         }
@@ -110,6 +114,64 @@ namespace Business.Repository.Implementations.Specific.ParametersModule
                 _logger.LogError(ex, $"Error getting inventory request notifications for user {userId}");
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Crea una notificación especializada de solicitud de inventario.
+        /// Serializa el contenido y llama al proceso de creación genérico.
+        /// </summary>
+        public async Task<NotificationOptionsDTO> CreateInventoryRequestNotificationAsync(CreateInventoryRequestRQS dto)
+        {
+            ValidationHelper.EnsureValidId(dto.UserId, "UserId");
+            if (dto.Content == null)
+            {
+                throw new ValidationException("Content", "El contenido de la notificación no puede ser nulo.");
+            }
+
+            // Serializar el contenido complejo a JSON
+            var jsonOptions = new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            };
+            string contentJson = JsonSerializer.Serialize(dto.Content, jsonOptions);
+
+            var notificationOptions = new NotificationOptionsDTO
+            {
+                Id = 0,
+                Title = "RQS de Cambio de Inventario", 
+                Type = TypeNotification.InventoryRequestApp,
+                Content = contentJson, 
+                Read = false,
+                Date = DateTimeOffset.UtcNow,
+                UserId = dto.UserId,
+                                                                 
+            };
+
+            var createdNotificationDto = await base.CreateAsync(notificationOptions);
+
+            // --- INICIO DE LÓGICA DE PUSH EN TIEMPO REAL ---
+
+            // OBTENER EL ESTADO ACTUALIZADO QUE ESPERAN LOS CLIENTES DE ANGULAR
+            var headerData = await this.GetHeaderNotificationsAsync(dto.UserId);
+            var inventoryListData = await this.GetInventoryRequestNotificationsAsync(dto.UserId);
+
+            string userIdString = dto.UserId.ToString();
+
+            // ENVIAR ACTUALIZACIÓN AL HEADER
+            await _realtimeUpdateService.SendUpdateToUserAsync(
+                userIdString,
+                "ReceiveHeaderUpdate", // Topic para el Header
+                headerData
+            );
+
+            // ENVIAR ACTUALIZACIÓN AL LISTADO DE INVENTARIO
+            await _realtimeUpdateService.SendUpdateToUserAsync(
+                userIdString,
+                "ReceiveInventoryListUpdate", // Topic para la lista
+                inventoryListData
+            );
+
+            return createdNotificationDto;
         }
 
         /// <summary>
@@ -301,41 +363,6 @@ namespace Business.Repository.Implementations.Specific.ParametersModule
             ValidationHelper.EnsureValidId(dto.UserId, "UserId");
 
             return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Hook para validar la obligatoriedad de campos antes del mapeo y actualización de una notificación.
-        /// </summary>
-        protected override Task BeforeUpdateMap(NotificationOptionsDTO dto, Notification entity)
-        {
-            ValidationHelper.ThrowIfEmpty(dto.Title, "Title");
-
-            return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Realiza validaciones asíncronas de unicidad del título antes de la creación.
-        /// </summary>
-        protected override async Task ValidateBeforeCreateAsync(NotificationOptionsDTO dto)
-        {
-            var existing = await _data.GetAllAsync();
-            if (existing.Any(f => StringHelper.EqualsNormalized(f.Title, dto.Title)))
-                throw new ValidationException("Name", $"Ya existe un Notification con el Titulo '{dto.Title}'.");
-        }
-
-        /// <summary>
-        /// Realiza validaciones asíncronas de unicidad del título antes de la actualización.
-        /// </summary>
-        protected override async Task ValidateBeforeUpdateAsync(NotificationOptionsDTO dto, Notification existingEntity)
-        {
-            var others = await _data.GetAllAsync();
-
-            if (!StringHelper.EqualsNormalized(existingEntity.Title, dto.Title))
-            {
-
-                if (others.Any(e => e.Id != dto.Id && StringHelper.EqualsNormalized(e.Title, dto.Title)))
-                    throw new ValidationException("Name", $"Ya existe un Notification con el Titulo ' {dto.Title}'.");
-            }
         }
     }
 }

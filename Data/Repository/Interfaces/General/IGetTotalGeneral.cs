@@ -18,6 +18,6 @@
         /// <summary>
         /// Obtiene zonas disponibles asignadas a un usuario
         /// </summary>
-        Task<IEnumerable<T>> GetAvailableZonesByUserAsync(int id);
+        Task<IEnumerable<T>> GetZonesByBranchOperativeAsync(int id);
     }
 }

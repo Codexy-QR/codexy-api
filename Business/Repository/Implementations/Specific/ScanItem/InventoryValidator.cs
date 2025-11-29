@@ -1,4 +1,6 @@
-﻿using Business.Services.CacheItem;
+﻿using Business.Repository.Interfaces.Specific.ParametersModule;
+using Business.Repository.Interfaces.Specific.System;
+using Business.Services.CacheItem;
 using Entity.DTOs.ScanItem;
 using Entity.Models.ScanItems;
 using Entity.Models.System;
@@ -11,6 +13,17 @@ namespace Business.Repository.Implementations.Specific.ScanItem
     /// </summary>
     public class InventoryValidator : IInventoryValidator
     {
+        private readonly IStateItemBusiness _stateItemBusiness;
+        private readonly ICategoryBusiness _categoryBusiness;
+        private readonly IItemBusiness _itemBusiness;
+
+        public InventoryValidator(IStateItemBusiness stateItemBusiness, ICategoryBusiness categoryBusiness, IItemBusiness itemBusiness)
+        {
+            _stateItemBusiness = stateItemBusiness;
+            _categoryBusiness = categoryBusiness;
+            _itemBusiness = itemBusiness;
+        }
+
         // --- Escaneo ---
         public void EnsureInventoryInProgress(Inventary? inventary)
         {
@@ -68,18 +81,36 @@ namespace Business.Repository.Implementations.Specific.ScanItem
                 throw new InvalidOperationException("El checker no pertenece a la misma sucursal que el inventario.");
         }
 
-        public VerificationComparisonDto CompareCacheWithInventary(Inventary inventary, IEnumerable<ScannedItem> scans)
+        public async Task<VerificationComparisonDto> CompareCacheWithInventary(Inventary inventary, IEnumerable<ScannedItem> scans)
         {
             var report = new VerificationComparisonDto
             {
                 InventaryId = inventary.Id
             };
 
-            // Diccionarios para acceso rápido
+            // Mapeos rápidos
             var itemsInZone = inventary.Zone.Items.ToDictionary(i => i.Id, i => i);
             var scannedItems = scans.ToDictionary(s => s.ItemId, s => s);
 
-            // 1. Faltantes
+            // Cargar estados y categorías una sola vez (OPTIMIZADO)
+            var allStates = (await _stateItemBusiness.GetAllAsync())
+                .ToDictionary(s => s.Id, s => s.Name);
+
+            var allCategories = (await _categoryBusiness.GetAllAsync())
+                .ToDictionary(c => c.Id, c => c.Name);
+
+            // Helpers
+            string GetStateName(int stateId) =>
+                allStates.TryGetValue(stateId, out var name) ? name : "Desconocido";
+
+            string GetCategoryName(int? id) =>
+                id.HasValue && allCategories.TryGetValue(id.Value, out var name)
+                    ? name
+                    : "Sin categoría";
+
+            // -----------------------------------------
+            // 1. MISSING ITEMS
+            // -----------------------------------------
             foreach (var expected in itemsInZone.Values)
             {
                 if (!scannedItems.ContainsKey(expected.Id))
@@ -87,52 +118,93 @@ namespace Business.Repository.Implementations.Specific.ScanItem
                     report.MissingItems.Add(new MissingItemDto
                     {
                         ItemId = expected.Id,
-                        Code = expected.Code,
-                        Name = expected.Name
+                        Code = expected.Code!,
+                        Name = expected.Name!,
+                        ExpectedState = expected.StateItem?.Name ?? "Desconocido",
+                        ScannedStateName = "Perdido",
+                        CategoryName = GetCategoryName(expected.CategoryItemId),
+                        Reason = "No escaneado",
+                        SuggestedAction = "Revisar en la zona o con responsable"
                     });
                 }
             }
 
-            // 2. Inesperados
+            // -----------------------------------------
+            // 2. UNEXPECTED ITEMS
+            // -----------------------------------------
             foreach (var scan in scans)
             {
                 if (!itemsInZone.ContainsKey(scan.ItemId))
                 {
+                    var fullItem = await _itemBusiness.GetByIdAsync(scan.ItemId);
+
                     report.UnexpectedItems.Add(new UnexpectedItemDto
                     {
                         ItemId = scan.ItemId,
-                        Code = scan.Code!,
-                        Name = scan.Name!
+                        Code = fullItem?.Code ?? "SIN_CODIGO",
+                        Name = fullItem?.Name ?? "SIN_NOMBRE",
+                        ZoneOrigen = fullItem?.ZoneName ?? "Zona desconocida",
+                        Reason = "No pertenece a esta zona",
+                        SuggestedAction = "Mover a la zona correcta o poner en cuarentena"
                     });
                 }
             }
 
-            // 3. Discrepancias de estado
+            // -----------------------------------------
+            // 3. STATE MISMATCHES (con regla PERDIDO → Missing)
+            // -----------------------------------------
             foreach (var scan in scans)
             {
-                if (itemsInZone.TryGetValue(scan.ItemId, out var expected) &&
-                    scan.StateItemId != expected.StateItemId)
+                if (!itemsInZone.TryGetValue(scan.ItemId, out var expected))
+                    continue;
+
+                if (scan.StateItemId == expected.StateItemId)
+                    continue;
+
+                var scannedStateName = GetStateName(scan.StateItemId);
+                var categoryName = GetCategoryName(expected.CategoryItemId);
+
+                if (scannedStateName.Equals("Perdido", StringComparison.OrdinalIgnoreCase))
                 {
-                    report.StateMismatches.Add(new StateMismatchDto
+                    report.MissingItems.Add(new MissingItemDto
                     {
                         ItemId = expected.Id,
-                        Code = expected.Code,
-                        Name = expected.Name,
-                        ExpectedState = expected.StateItem?.Name ?? expected.StateItemId.ToString(),
-                        ScannedState = scan.StateItemName ?? scan.StateItemId.ToString()
+                        Code = expected.Code!,
+                        Name = expected.Name!,
+                        ExpectedState = expected.StateItem?.Name ?? "Desconocido",
+                        ScannedStateName = "Perdido",
+                        CategoryName = categoryName,
+                        Reason = "Marcado como perdido",
+                        SuggestedAction = "Revisar en la zona o con responsable"
                     });
+
+                    continue;
                 }
+
+                report.StateMismatches.Add(new StateMismatchDto
+                {
+                    ItemId = expected.Id,
+                    Code = expected.Code!,
+                    Name = expected.Name!,
+                    ExpectedState = expected.StateItem?.Name ?? "Desconocido",
+                    ScannedState = scan.StateItemId.ToString(),
+                    ScannedStateName = scannedStateName,
+                    CategoryName = categoryName,
+                    Reason = "Cambio de estado",
+                    SuggestedAction = "Revisar físicamente o actualizar registro"
+                });
             }
 
+            // -----------------------------------------
             // 4. Resumen
-            report.ShortSummary = $"Se detectaron {report.MissingItems.Count} faltantes, " +
-                                  $"{report.UnexpectedItems.Count} inesperados y " +
-                                  $"{report.StateMismatches.Count} discrepancias de estado.";
+            // -----------------------------------------
+            report.ShortSummary =
+                $"Se detectaron {report.MissingItems.Count} faltantes, " +
+                $"{report.UnexpectedItems.Count} inesperados y " +
+                $"{report.StateMismatches.Count} discrepancias de estado.";
 
             return report;
         }
 
-
     }
-
 }
