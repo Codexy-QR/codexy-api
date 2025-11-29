@@ -86,11 +86,21 @@ namespace Web.Controllers
         public async Task<IActionResult> LoginOperativo([FromBody] LoginOperativoDTO loginRequest)
         {
             var response = await _authService.AuthenticateByDocument(loginRequest);
-            if (response == null)
-                return Unauthorized("Credenciales inválidas.");
+
+            if (!response.Success)
+            {
+                // Credenciales inválidas → 401
+                if (response.Message == "Credenciales inválidas." ||
+                    response.Message == "El usuario no tiene permisos operativos.")
+                    return Unauthorized(response);
+
+                // Usuario existe pero problemas operativos → 403 Forbidden
+                return StatusCode(StatusCodes.Status403Forbidden, response);
+            }
 
             return Ok(response);
         }
+
 
         /// <summary>
         /// Renueva el Access Token usando el Refresh Token almacenado en cookies
@@ -158,10 +168,10 @@ namespace Web.Controllers
 
                 return Ok(new
                 {
-                    userId,
-                    personId,
-                    username,
-                    role
+                    userId = userId,
+                    personId = personId,
+                    username = username,
+                    role = role
                 });
             }
             catch (Exception ex)
@@ -263,7 +273,7 @@ namespace Web.Controllers
                 await transaction.CommitAsync();
 
                 // ================== [ EMAIL DE BIENVENIDA ] ==================
-                var loginLink = $"http://localhost:4200/Login";
+                var loginLink = $"https://wonderful-bay-06d04b00f.3.azurestaticapps.net/Login";
                 var welcomeBody = EmailTemplates.GetWelcomeTemplate(createdUser.Username, loginLink);
 
                 await _emailService.SendEmailAsync(

@@ -104,5 +104,26 @@ namespace Web.Controllers.System
         {
             return await TryExecuteAsync(() => _service.DeleteAsync(id, strategy), "DeleteItem");
         }
+
+        /// <summary>
+        /// Cancela un inventario activo (elimina registro y limpia caché)
+        /// </summary>
+        [HttpDelete("Cancel/{inventoryId:int}")]
+        [Authorize(Roles = "SM_ACTION, ADMINISTRADOR, SUBADMINISTRADOR, ENCARGADO_ZONA, OPERATIVO")]
+        [ProducesResponseType(200)]
+        [ProducesResponseType(404)]
+        [ProducesResponseType(400)]
+        public async Task<IActionResult> CancelInventory(int inventoryId)
+        {
+            return await TryExecuteAsync(async () =>
+            {
+                var result = await _service.CancelInventoryAsync(inventoryId);
+
+                if (!result)
+                    return NotFound(new { message = "Inventario no encontrado" });
+
+                return Ok(new { message = "Inventario cancelado correctamente" });
+            }, "CancelInventory");
+        }
     }
 }

@@ -5,8 +5,6 @@
         "active": true,
         "personId": 1
     },
-
-
     {
         "username": "admin",
         "password": "admin123",
@@ -19,8 +17,6 @@
         "personId": 3,
         "active": true
     },
-
-
     {
         "username": "subadmin_centro2",
         "password": "sub123",

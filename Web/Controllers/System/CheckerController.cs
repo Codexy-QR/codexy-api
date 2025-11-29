@@ -52,7 +52,7 @@ namespace Web.Controllers.System
         [HttpGet("GetByBranch/{branchId:int}")]
         [ProducesResponseType(typeof(IEnumerable<CheckerByBranchListDTO>), 200)]
         [ProducesResponseType(400)]
-        public async Task<IActionResult> GetCheckerBybranch(int branchId) =>
+        public async Task<IActionResult> GetCheckerByBranch(int branchId) =>
             await TryExecuteAsync(() => _service.GetCheckersByBranchAsync(branchId), "GetByBranch");
 
         /// <summary>

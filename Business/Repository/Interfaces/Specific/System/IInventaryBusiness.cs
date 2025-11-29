@@ -36,5 +36,10 @@ namespace Business.Repository.Interfaces.Specific.System
         /// </summary>
         /// <param name="inventoryId">ID del registro de inventario.</param>
         Task<InventoryDetailResponseDTO> GetInventoryDetailAsync(int inventoryId);
+
+        /// <summary>
+        /// Cancela un inventario en curso (elimina registro y limpia caché)
+        /// </summary>
+        Task<bool> CancelInventoryAsync(int inventoryId);
     }
 }
