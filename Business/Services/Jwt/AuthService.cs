@@ -53,7 +53,8 @@ namespace Business.Services.Jwt
             return new LoginResponseDTO
             {
                 Token = accessToken,
-                RefreshToken = refreshToken
+                RefreshToken = refreshToken,
+                Message = "Inicio de sesión exitoso"
             };
         }
 
@@ -63,37 +64,89 @@ namespace Business.Services.Jwt
         /// </summary>
         /// <param name="loginRequest">Los datos de inicio de sesión del operativo (tipo y número de documento).</param>
         /// <returns>Un <see cref="LoginResponseDTO"/> con los tokens, o null si el usuario no es encontrado o no es operativo.</returns>
-        public async Task<LoginResponseDTO?> AuthenticateByDocument(LoginOperativoDTO loginRequest)
+        public async Task<LoginOperativoResponseDTO> AuthenticateByDocument(LoginOperativoDTO loginRequest)
         {
             var users = await _context.User
-            .Include(u => u.Person)
-            .Include(u => u.UserRoles)
-                .ThenInclude(ur => ur.Role)
-            .Where(u => u.Active == true &&
-                        u.Person.DocumentType == loginRequest.DocumentType &&
-                        u.Person.DocumentNumber == loginRequest.DocumentNumber)
-            .ToListAsync();
+                .Include(u => u.Person)
+                .Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
+                .Include(u => u.Operating).ThenInclude(o => o.OperationalGroup)
+                .Where(u => u.Active &&
+                            u.Person.DocumentType == loginRequest.DocumentType &&
+                            u.Person.DocumentNumber == loginRequest.DocumentNumber)
+                .ToListAsync();
 
             if (!users.Any())
-                return null;
+            {
+                return new LoginOperativoResponseDTO
+                {
+                    Success = false,
+                    Message = "Credenciales inválidas."
+                };
+            }
 
-            var user = users.FirstOrDefault(u => u.UserRoles.Any(ur => ur.Role.Name == "OPERATIVO"));
+            var user = users.FirstOrDefault(u =>
+                u.UserRoles.Any(ur => ur.Role.Name == "OPERATIVO"));
+
             if (user == null)
-                return null;
+            {
+                return new LoginOperativoResponseDTO
+                {
+                    Success = false,
+                    Message = "El usuario no tiene permisos operativos."
+                };
+            }
 
-            var role = user.UserRoles.FirstOrDefault()?.Role?.Name ?? "OPERATIVO";
+            // Obtener Operating y grupo operativo
+            var operating = user.Operating;
+            if (operating == null)
+            {
+                return new LoginOperativoResponseDTO
+                {
+                    Success = false,
+                    Message = "El usuario no tiene un registro operativo asignado."
+                };
+            }
 
+            var group = operating.OperationalGroup;
+            if (group == null)
+            {
+                return new LoginOperativoResponseDTO
+                {
+                    Success = false,
+                    Message = "El usuario operativo no está asignado a ningún grupo operativo."
+                };
+            }
+
+            // VALIDACIÓN DE FECHAS
+            var now = DateTime.UtcNow;
+
+            bool isValidDate =
+                group.DateStart <= now &&
+                (group.DateEnd == null || now <= group.DateEnd);
+
+            if (!isValidDate)
+            {
+                return new LoginOperativoResponseDTO
+                {
+                    Success = false,
+                    Message = $"El grupo operativo '{group.Name}' no se encuentra vigente."
+                };
+            }
+
+            // SI LA FECHA ES VÁLIDA → GENERAMOS TOKEN
+            var role = user.UserRoles.First().Role.Name;
             int accessTokenMinutes = _configuration.GetValue<int>("Jwt:AccessTokenExpiresInMinutes");
             int refreshTokenMinutes = _configuration.GetValue<int>("Jwt:RefreshTokenExpiresInMinutes");
 
             var accessToken = _jwtService.GenerateToken(user.Id, user.PersonId, user.Username, role, accessTokenMinutes);
             var refreshToken = _jwtService.GenerateToken(user.Id, user.PersonId, user.Username, role, refreshTokenMinutes);
 
-            return new LoginResponseDTO
+            return new LoginOperativoResponseDTO
             {
+                Success = true,
+                Message = "Acceso concedido.",
                 Token = accessToken,
-                RefreshToken = refreshToken,
-                Message = "Inicio de sesión exitoso"
+                RefreshToken = refreshToken
             };
         }
 

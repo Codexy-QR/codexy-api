@@ -2,6 +2,7 @@
 using CloudinaryDotNet.Actions;
 using Data.Repository.Interfaces.General;
 using Entity.Context;
+using Entity.DTOs.System.Item;
 using Microsoft.EntityFrameworkCore;
 using QRCoder;
 using System.Text.RegularExpressions;
@@ -26,32 +27,21 @@ namespace Business.Services.GenerarQR
         /// <summary>
         /// Genera y guarda un código QR estructurado jerárquicamente (empresa/sucursal/zona)
         /// </summary>
-        public string GenerateAndSaveQrCodeWithHierarchy(string content, int itemId, string itemCode, bool useShortId = true)
+        public QrUploadResult GenerateAndSaveQrCodeWithHierarchy(string content, int itemId, string itemCode, bool useShortId = true)
         {
-            // Obtener jerarquia completa del ítem
             var hierarchy = GetItemHierarchy(itemId);
+            var pngBytes = GenerateQrBytes(content);
 
-            // Generar el QR en memoria
-            using var generator = new QRCodeGenerator();
-            QRCodeData data = generator.CreateQrCode(content, QRCodeGenerator.ECCLevel.Q);
-            var qrCode = new PngByteQRCode(data);
-            var pngBytes = qrCode.GetGraphic(20);
-
-            // Construir ruta única (nombres completos)
             string folderPath = BuildFolderPath(hierarchy);
             string fileName = GenerateOptimizedFileName(itemCode, useShortId);
 
-            // Subir a Cloudinary
             using var stream = new MemoryStream(pngBytes);
             var uploadParams = new ImageUploadParams
             {
                 File = new FileDescription(fileName, stream),
-
-                // PublicId usando nombres completos (sin "CodexyQRs/" al inicio)
-                PublicId = $"{folderPath.Replace("CodexyQRs/", string.Empty)}/{fileName}",
-
-                // Folder físico con nombres completos
+                PublicId = fileName,
                 Folder = folderPath,
+                // El PublicId final será: "CodexyQRs/Empresa/Sucursal/Zona/item_CODE_shortId"
 
                 Overwrite = true,
                 Transformation = new Transformation()
@@ -61,8 +51,42 @@ namespace Business.Services.GenerarQR
 
             var uploadResult = _cloudinary.Upload(uploadParams);
 
-            // Devolver la URL final segura
-            return uploadResult.SecureUrl.ToString();
+            // --- MODIFICADO ---
+            // Devolvemos el objeto completo
+            return new QrUploadResult
+            {
+                SecureUrl = uploadResult.SecureUrl.ToString(),
+                PublicId = uploadResult.PublicId
+            };
+        }
+
+        /// <summary>
+        /// Elimina un recurso de Cloudinary usando su PublicId
+        /// </summary>
+        /// <param name="publicId">El PublicId del archivo a eliminar</param>
+        public async Task<bool> DeleteQrCodeAsync(string publicId)
+        {
+            if (string.IsNullOrEmpty(publicId))
+                return false;
+
+            var deleteParams = new DeletionParams(publicId)
+            {
+                ResourceType = ResourceType.Image // Asegúrate de que es 'Image'
+            };
+
+            try
+            {
+                var result = await _cloudinary.DestroyAsync(deleteParams);
+
+                // "ok" o "not found" se consideran éxito (ya no está o no existía)
+                return result.Result.Equals("ok", StringComparison.OrdinalIgnoreCase) ||
+                       result.Result.Equals("not found", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception)
+            {
+                // Loggear el error si tienes un logger aquí
+                return false;
+            }
         }
 
         /// <summary>
@@ -77,17 +101,25 @@ namespace Business.Services.GenerarQR
                 .FirstOrDefault(i => i.Id == itemId);
 
             if (item?.Zone?.Branch?.Company == null)
-                throw new InvalidOperationException("No se pudo obtener la jerarquía completa del ítem");
+                throw new InvalidOperationException($"No se pudo obtener la jerarquía completa del ítem {itemId}");
 
             return new ItemHierarchy
             {
-                CompanyId = item.Zone.Branch.Company.Id,
                 CompanyName = SanitizeForFolder(item.Zone.Branch.Company.Name),
-                BranchId = item.Zone.Branch.Id,
                 BranchName = SanitizeForFolder(item.Zone.Branch.Name),
-                ZoneId = item.Zone.Id,
                 ZoneName = SanitizeForFolder(item.Zone.Name)
             };
+        }
+
+        /// <summary>
+        /// Genera los bytes de la imagen QR
+        /// </summary>
+        private byte[] GenerateQrBytes(string content)
+        {
+            using var generator = new QRCodeGenerator();
+            QRCodeData data = generator.CreateQrCode(content, QRCodeGenerator.ECCLevel.Q);
+            var qrCode = new PngByteQRCode(data);
+            return qrCode.GetGraphic(20);
         }
 
         /// <summary>
@@ -177,11 +209,8 @@ namespace Business.Services.GenerarQR
     /// </summary>
     public class ItemHierarchy
     {
-        public int CompanyId { get; set; }
         public string CompanyName { get; set; } = string.Empty;
-        public int BranchId { get; set; }
         public string BranchName { get; set; } = string.Empty;
-        public int ZoneId { get; set; }
         public string ZoneName { get; set; } = string.Empty;
-    }
+    }    
 }

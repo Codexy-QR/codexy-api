@@ -1,3 +1,4 @@
+using Business.Abstractions;
 using Business.Factory;
 using Business.Repository.Implementations.Specific.ScanItem;
 using Business.Repository.Implementations.Specific.System.Others;
@@ -9,7 +10,9 @@ using Business.Services.CargaMasiva.Interfaces;
 using Business.Services.CredentialGenerator;
 using Business.Services.CredentialGenerator.Interfaces;
 using Business.Services.Entities.Implementations;
+using Business.Services.Entities.Implementations.Connection;
 using Business.Services.Entities.Interfaces;
+using Business.Services.Entities.Interfaces.Connection;
 using Business.Services.GenerarQR;
 using Business.Services.InventaryItem;
 using Business.Services.Jwt;
@@ -30,9 +33,11 @@ using Data.Repository.Implementations.Strategy.Delete;
 using Data.Repository.Interfaces.General;
 using Data.Repository.Interfaces.Specific.System.Others;
 using Data.Repository.Interfaces.Strategy.Delete;
+using DocumentFormat.OpenXml.Office2016.Drawing.ChartDrawing;
 using Entity.Models.ParametersModule;
 using Utilities.Common;
 using Utilities.Helpers;
+using Web.Implementations;
 
 namespace Web.Extensions
 {
@@ -58,6 +63,9 @@ namespace Web.Extensions
             services.AddScoped<AuthService>();
             services.AddScoped<IUserContextService, UserContextService>();
             services.AddScoped<CookieTokenHelper>();
+
+            // =============== [ SingalR ] ===============
+            services.AddSingleton<IRealtimeUpdateService, SignalrRealtimeService>();
 
             // =============== [ Factory ] ===============
             services.AddScoped<IDataFactoryGlobal, GlobalFactory>(); // Data
@@ -96,6 +104,7 @@ namespace Web.Extensions
             // =============== [ Others Entity] ===============
             services.AddScoped<IDashboardData, DashboardData>();
             services.AddScoped<IDashboardBusiness, DashboardBusiness>();
+            services.AddScoped<IInventoryJoinService, InventoryJoinService>(); // Union de Operativo 
 
             // Inventory Repository
             services.AddScoped<IInventoryRepository, InventoryRepository>();

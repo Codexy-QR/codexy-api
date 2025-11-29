@@ -7,6 +7,12 @@
     public interface IGenericData<T> where T : class
     {
         /// <summary>
+        /// Parsea la entidad a IQueryable para consultas personalizadas
+        /// </summary>
+        /// <returns></returns>
+        IQueryable<T> GetQueryable();
+
+        /// <summary>
         /// Obtiene todos los registros activos
         /// </summary>
         Task<IEnumerable<T>> GetAllAsync();

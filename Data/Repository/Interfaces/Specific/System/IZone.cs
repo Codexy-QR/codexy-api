@@ -36,9 +36,9 @@ namespace Data.Repository.Interfaces.Specific.System
         /// <summary>
         /// Obtiene zonas disponibles para un usuario según su grupo operativo
         /// </summary>
-        /// <param name="userId"></param>
+        /// <param name="branchId"></param>
         /// <returns></returns>
-        Task<IEnumerable<Zone>> GetAvailableZonesByUserAsync(int userId);
+        Task<IEnumerable<Zone>> GetZonesByBranchOperativeAsync(int branchId);
 
         /// <summary>
         /// Obtiene inventario base de items de una zona
