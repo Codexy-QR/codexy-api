@@ -19,5 +19,12 @@ namespace Business.Repository.Interfaces.Specific.System
         /// </summary>
         /// <param name="zoneId">ID de la zona.</param>
         Task<IEnumerable<ItemConsultDTO>> GetAllItemsSpecificAsync(int zoneId);
+
+        /// <summary>
+        /// Obtiene un ítem específico por su código dentro de una sucursal determinada.
+        /// </summary>
+        /// <param name="code">Código único del ítem</param>
+        /// <param name="branchId">ID de la sucursal</param>
+        Task<ItemConsultDTO?> GetByCodeAndBranchAsync(string code, int branchId);
     }
 }

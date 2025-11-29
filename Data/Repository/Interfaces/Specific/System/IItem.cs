@@ -36,5 +36,11 @@ namespace Data.Repository.Interfaces.Specific.System
         /// Obtiene todos los items incluyendo inactivos (versión 2)
         /// </summary>
         Task<IEnumerable<Item>> GetAllTotalV2Async();
+
+        /// <summary>
+        /// Obtiene un item por su código dentro de una sucursal específica,
+        /// incluyendo sus relaciones de categoría, estado y zona.
+        /// </summary>
+        Task<Item?> GetByCodeAndBranchAsync(string code, int branchId);
     }
 }

@@ -1,4 +1,5 @@
 ﻿using Entity.Models.Base;
+using Utilities.Enums.Models;
 
 namespace Entity.Models.System
 {
@@ -6,6 +7,8 @@ namespace Entity.Models.System
     {
         public DateTime Date { get; set; }
         public string Observations { get; set; } = string.Empty;
+        public string? InvitationCode { get; set; }
+        public InventaryStatus? Status { get; set; } = InventaryStatus.InProgress;
 
         // Claves Foraneas
         public int ZoneId { get; set; }

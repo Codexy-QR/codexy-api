@@ -26,6 +26,12 @@ namespace Business.Repository.Interfaces.Specific.ParametersModule
         Task<IEnumerable<InventoryRequestNotificationDTO>> GetInventoryRequestNotificationsAsync(int userId);
 
         /// <summary>
+        /// Crea una notificación especializada de solicitud de inventario.
+        /// </summary>
+        /// <param name="dto">Datos de la solicitud de creación.</param>
+        Task<NotificationOptionsDTO> CreateInventoryRequestNotificationAsync(CreateInventoryRequestRQS dto);
+
+        /// <summary>
         /// Marca una notificación específica como leída por el usuario.
         /// </summary>
         /// <param name="notificationId">ID de la notificación a marcar.</param>
@@ -43,7 +49,6 @@ namespace Business.Repository.Interfaces.Specific.ParametersModule
         /// </summary>
         /// <param name="userId">ID del usuario.</param>
         Task<bool> MarkAllAsReadAsync(int userId);
-
 
         /// <summary>
         /// Coordina el envío de un correo electrónico (usa el servicio externo) para una única solicitud.

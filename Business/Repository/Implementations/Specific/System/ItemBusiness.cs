@@ -56,6 +56,20 @@ namespace Business.Repository.Implementations.Specific.System
         }
 
 
+        /// <summary>
+        /// Obtiene un ítem específico por su código dentro de una sucursal determinada.
+        /// </summary>
+        /// <param name="code">Código único del ítem</param>
+        /// <param name="branchId">ID de la sucursal</param>
+        /// <returns>El DTO del ítem si existe; de lo contrario, null</returns>
+        public async Task<ItemConsultDTO?> GetByCodeAndBranchAsync(string code, int branchId)
+        {
+            var entity = await _itemData.GetByCodeAndBranchAsync(code, branchId);
+            return _mapper.Map<ItemConsultDTO?>(entity);
+        }
+
+
+
         // Specific
 
 
