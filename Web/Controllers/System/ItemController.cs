@@ -87,5 +87,19 @@ namespace Web.Controllers.System
         {
             return await TryExecuteAsync(() => _service.DeleteAsync(id, strategy), "DeleteItem");
         }
+
+        /// <summary>
+        /// Obtiene un ítem por su código dentro de una sucursal específica.
+        /// </summary>
+        /// <param name="branchId">ID de la sucursal</param>
+        /// <param name="code">Código del ítem</param>
+        [HttpGet("GetByCodeAndBranch/{branchId:int}/{code}")]
+        [Authorize(Roles = "SM_ACTION, ADMINISTRADOR, SUBADMINISTRADOR, ENCARGADO_ZONA, OPERATIVO")]
+        [ProducesResponseType(typeof(ItemConsultDTO), 200)]
+        [ProducesResponseType(400)]
+        [ProducesResponseType(404)]
+        public async Task<IActionResult> GetByCodeAndBranch(int branchId, string code) =>
+            await TryExecuteAsync(() => _service.GetByCodeAndBranchAsync(code, branchId), "GetByCodeAndBranch");
+
     }
 }

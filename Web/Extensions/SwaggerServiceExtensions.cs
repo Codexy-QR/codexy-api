@@ -8,7 +8,7 @@ namespace Web.Extensions
     public static class SwaggerServiceExtensions
     {
         /// <summary>
-        /// Configura Swagger básico para documentación de API
+        /// Configura Swagger con documentación, soporte para JWT
         /// </summary>
         /// <param name="services">Colección de servicios</param>
         public static IServiceCollection AddSwaggerDocumentation(this IServiceCollection services)
@@ -17,47 +17,36 @@ namespace Web.Extensions
 
             services.AddSwaggerGen(c =>
             {
-                c.SwaggerDoc("v1", new OpenApiInfo
-                {
-                    Title = "Mi API",
-                    Version = "v1"
-                });
-            });
+                c.SwaggerDoc("v1", new OpenApiInfo { Title = "Mi API", Version = "v1" });
 
-            return services;
-        }
-
-        /// <summary>
-        /// Configura Swagger con soporte para autenticación JWT Bearer
-        /// </summary>
-        /// <param name="services">Colección de servicios</param>
-        public static IServiceCollection AddSwaggerWithJwtSupport(this IServiceCollection services)
-        {
-            services.AddSwaggerGen(c =>
-            {
+                // --- 1. Definición de Seguridad para JWT (Bearer) ---
                 c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
                 {
-                    Description = "JWT Authorization header",
+                    // Descripción actualizada para el usuario
+                    Description = "Autorización JWT usando el esquema Bearer.",
                     Name = "Authorization",
                     In = ParameterLocation.Header,
-                    Type = SecuritySchemeType.ApiKey,
-                    Scheme = "Bearer"
+                    Type = SecuritySchemeType.Http,
+                    Scheme = "Bearer",
+                    BearerFormat = "JWT"
                 });
 
+                // --- 3. Requerimiento de Seguridad (Aplica AMBOS globalmente) ---
                 c.AddSecurityRequirement(new OpenApiSecurityRequirement
-            {
                 {
-                    new OpenApiSecurityScheme
                     {
-                        Reference = new OpenApiReference
+                        // Requerimiento para Bearer
+                        new OpenApiSecurityScheme
                         {
-                            Type = ReferenceType.SecurityScheme,
-                            Id = "Bearer"
-                        }
-                    },
-                    Array.Empty<string>()
-                }
-            });
+                            Reference = new OpenApiReference
+                            {
+                                Type = ReferenceType.SecurityScheme,
+                                Id = "Bearer"
+                            }
+                        },
+                        Array.Empty<string>()
+                    }
+                });
             });
 
             return services;

@@ -20,7 +20,7 @@ namespace Web.Controllers.Parameters
         /// <summary>
         /// Obtiene todos los registros activos
         /// </summary>
-        [Authorize(Roles = "SM_ACTION, ADMINISTRADOR, SUBADMINISTRADOR, ENCARGADO_ZONA")]
+        [Authorize(Roles = "SM_ACTION, ADMINISTRADOR, SUBADMINISTRADOR, ENCARGADO_ZONA, OPERATIVO")]
         [HttpGet("GetAll/")]
         [ProducesResponseType(typeof(IEnumerable<StateItemDTO>), 200)]
         public async Task<IActionResult> GetAll() =>

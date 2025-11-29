@@ -1,8 +1,11 @@
-﻿using System.Text.Json;
-using Data.SeedData.Interface;
+﻿using Data.SeedData.Interface;
 using Entity.Context;
+using Entity.Models.System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Utilities.Enums.Models;
 using Utilities.Helpers.Interface;
 
 namespace Data.SeedData.Specific
@@ -36,62 +39,60 @@ namespace Data.SeedData.Specific
         /// <param name="context">Contexto de base de datos</param>
         public async Task SeedAsync(AppDbContext context)
         {
-            // Obtener la ruta configurada (si existe)
-            var configuredPath = _configuration["SeedDataPath"];
+            // Obtener ruta configurada, o default interna
+            var configuredPath = _configuration["SeedData"];
+            var basePath = !string.IsNullOrEmpty(configuredPath)
+                ? configuredPath
+                : Path.Combine(AppContext.BaseDirectory, "SeedData", "JSONs");
 
-            string basePath;
-
-            // Si no se configuró, usar la ruta interna del proyecto (Data/SeedData)
-            if (!string.IsNullOrEmpty(configuredPath))
-            {
-                basePath = configuredPath;
-            }
-            else
-            {
-                // Busca dentro del directorio base de ejecución (bin/...) → SeedData
-                basePath = Path.Combine(AppContext.BaseDirectory, "SeedData", "JSONs");
-            }
-
-            // Combinar la ruta completa del archivo
+            // Ruta completa del archivo
             var filePath = Path.Combine(basePath, _folderName, _fileName);
 
-            // Validar existencia del archivo
             if (!File.Exists(filePath))
             {
-                Console.WriteLine($"[Seeder] ⚠️ Archivo no encontrado: {filePath}");
+                Console.WriteLine($"[Seeder] Archivo no encontrado: {filePath}");
                 return;
             }
 
-            // Leer y deserializar el contenido JSON
+            // Leer archivo JSON
             var json = await File.ReadAllTextAsync(filePath);
-            var data = JsonSerializer.Deserialize<List<T>>(json, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            });
 
-            // Insertar los datos si la tabla está vacía
-            if (data is { Count: > 0 })
+            // Settings para enums como string
+            var options = new JsonSerializerOptions
             {
-                foreach (var item in data)
+                PropertyNameCaseInsensitive = true,
+                Converters = { new JsonStringEnumConverter() }
+            };
+
+            // Deserializar
+            var data = JsonSerializer.Deserialize<List<T>>(json, options);
+            if (data is not { Count: > 0 })
+                return;
+
+            // Procesar entidades
+            foreach (var item in data)
+            {
+                // Default STATUS si aplica → MUY IMPORTANTE
+                if (item is Inventary inv)
                 {
-                    // Si la entidad requiere hasheo de contraseña
-                    if (item is IRequiresPasswordHashing hashable)
-                    {
-                        hashable.HashPassword();
-                    }
+                    inv.Status ??= InventaryStatus.InProgress;
                 }
 
-                var dbSet = context.Set<T>();
-                if (!await dbSet.AnyAsync())
+                // Si la entidad requiere hasheo de contraseña
+                if (item is IRequiresPasswordHashing hashable)
                 {
-                    await dbSet.AddRangeAsync(data);
-                    await context.SaveChangesAsync();
-                    Console.WriteLine($"[Seeder] Datos insertados para: {typeof(T).Name}");
+                    hashable.HashPassword();
                 }
-                else
-                {
-                    Console.WriteLine($"[Seeder] Ya existen datos para: {typeof(T).Name}, se omite el seed.");
-                }
+            }
+
+            var dbSet = context.Set<T>();
+
+            // Evitar duplicados: solo insertar si la tabla está vacía
+            if (!await dbSet.AnyAsync())
+            {
+                await dbSet.AddRangeAsync(data);
+                await context.SaveChangesAsync();
+                Console.WriteLine($"[Seeder] Datos insertados para: {typeof(T).Name}");
             }
         }
     }
