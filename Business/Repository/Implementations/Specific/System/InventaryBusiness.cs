@@ -1,5 +1,8 @@
 ﻿using AutoMapper;
+using Business.Abstractions;
+using Business.Helper;
 using Business.Repository.Interfaces.Specific.System;
+using Business.Services.CacheItem;
 using Data.Factory;
 using Data.Repository.Interfaces.General;
 using Data.Repository.Interfaces.Specific.System;
@@ -9,8 +12,6 @@ using Entity.DTOs.System.Inventary.AreaManager.InventoryDetail;
 using Entity.DTOs.System.Inventary.AreaManager.InventorySummary;
 using Entity.Models.System;
 using Microsoft.Extensions.Logging;
-using System.ComponentModel.DataAnnotations;
-using Utilities.Helpers;
 
 namespace Business.Repository.Implementations.Specific.System
 {
@@ -24,11 +25,15 @@ namespace Business.Repository.Implementations.Specific.System
 
         private readonly IGeneral<Inventary> _general;
         private readonly IInventary _inventary;
+        private readonly IInventoryCacheService _cacheService;
+        private readonly IRealtimeUpdateService _realtimeUpdateService;
 
         public InventaryBusiness(
             IDataFactoryGlobal factory,
             IGeneral<Inventary> general,
             IInventary inventary,
+            IInventoryCacheService cacheService,
+            IRealtimeUpdateService realtimeUpdateService,
             IDeleteStrategyResolver<Inventary> deleteStrategyResolver,
             ILogger<Inventary> logger,
             IMapper mapper)
@@ -36,6 +41,8 @@ namespace Business.Repository.Implementations.Specific.System
         {
             _general = general;
             _inventary = inventary;
+            _cacheService = cacheService;
+            _realtimeUpdateService = realtimeUpdateService;
         }
 
         // General 
@@ -79,47 +86,30 @@ namespace Business.Repository.Implementations.Specific.System
             return _mapper.Map<InventoryDetailResponseDTO>(detail);
         }
 
-
-        // Actions
-
         /// <summary>
-        /// Hook para realizar validaciones de campos obligatorios/IDs y transformaciones de datos (ej. hashing de contraseñas) antes del mapeo y creación.
+        /// Cancela un inventario activo: elimina el registro de BD y limpia el caché de escaneos
         /// </summary>
-        protected override Task BeforeCreateMap(InventaryDTO dto, Inventary entity)
+        public async Task<bool> CancelInventoryAsync(int inventoryId)
         {
-            ValidationHelper.ThrowIfEmpty(dto.Observations, "Name");
-            return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Hook para realizar validaciones de campos obligatorios/IDs y transformaciones condicionales de datos antes del mapeo y actualización.
-        /// </summary>
-        protected override Task BeforeUpdateMap(InventaryDTO dto, Inventary entity)
-        {
-            ValidationHelper.ThrowIfEmpty(dto.Observations, "Name");
-            return Task.CompletedTask;
-        }
-
-        /// <summary>
-        /// Realiza validaciones asíncronas de unicidad o reglas de negocio complejas antes de la creación de una entidad.
-        /// </summary>
-        protected override async Task ValidateBeforeCreateAsync(InventaryDTO dto)
-        {
-            var existing = await _data.GetAllAsync();
-            if (existing.Any(e => StringHelper.EqualsNormalized(e.Observations, dto.Observations)))
-                throw new ValidationException($"Ya existe un Branch con el Name '{dto.Observations}'.");
-        }
-
-        /// <summary>
-        /// Realiza validaciones asíncronas de unicidad o reglas de negocio complejas antes de la actualización de una entidad, excluyendo el registro actual.
-        /// </summary>
-        protected override async Task ValidateBeforeUpdateAsync(InventaryDTO dto, Inventary existingEntity)
-        {
-            if (!StringHelper.EqualsNormalized(existingEntity.Observations, dto.Observations))
+            try
             {
-                var others = await _data.GetAllAsync();
-                if (others.Any(e => e.Id != dto.Id && StringHelper.EqualsNormalized(e.Observations, dto.Observations)))
-                    throw new ValidationException($"Ya existe un Brach con el Name '{dto.Observations}'.");
+                _cacheService.ClearScans(inventoryId);
+
+                var affectedZone = await _inventary.CancelInventoryAsync(inventoryId);
+
+                if (affectedZone != null)
+                {
+                    var payload = ZoneStateMapper.Map(affectedZone);
+                    await _realtimeUpdateService.SendUpdateToAllAsync("ReceiveZoneStateUpdate", payload);
+                    return true;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Error en CancelInventoryAsync para inventoryId: {inventoryId}");
+                throw;
             }
         }
     }

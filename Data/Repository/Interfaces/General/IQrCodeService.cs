@@ -1,4 +1,6 @@
-﻿namespace Data.Repository.Interfaces.General
+﻿using Entity.DTOs.System.Item;
+
+namespace Data.Repository.Interfaces.General
 {
     /// <summary>
     /// Servicio para generación y almacenamiento de códigos QR
@@ -20,6 +22,13 @@
         /// <param name="content">Contenido a codificar en el QR.</param>
         /// <param name="customOptions">Opciones personalizadas.</param>
         /// <returns>URL pública del QR generado.</returns>
-        string GenerateAndSaveQrCodeWithHierarchy(string content, int itemId, string itemCode, bool useShortId = true);
+        QrUploadResult GenerateAndSaveQrCodeWithHierarchy(string content, int itemId, string itemCode, bool useShortId = true);
+
+        /// <summary>
+        /// Elimina un código QR de Cloudinary por su PublicId.
+        /// </summary>
+        /// <param name="publicId"></param>
+        /// <returns></returns>
+        Task<bool> DeleteQrCodeAsync(string publicId);
     }
 }

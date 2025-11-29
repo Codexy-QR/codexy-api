@@ -7,6 +7,6 @@
         public string OperatingGroupName { get; set; } = string.Empty;
         public string CheckerName { get; set; } = string.Empty;
         public string CheckerObservation { get; set; } = string.Empty;
-        public List<InventoryRequestItemDTO> Differences { get; set; } = new();
+        public List<InventoryRequestItemDTO> Differences { get; set; } = [];
     }
 }
